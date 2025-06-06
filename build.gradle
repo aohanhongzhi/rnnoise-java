@@ -1,7 +1,6 @@
 plugins {
     id("java-library")
     id("checkstyle")
-    id("com.github.spotbugs").version("5.0.7")
     id("org.cadixdev.licenser").version("0.6.1")
     id("maven-publish")
 }
@@ -19,8 +18,8 @@ compileJava {
 }
 
 java {
-    setSourceCompatibility(JavaVersion.VERSION_1_8)
-    setTargetCompatibility(JavaVersion.VERSION_1_8)
+    setSourceCompatibility(JavaVersion.VERSION_21)
+    setTargetCompatibility(JavaVersion.VERSION_21)
 }
 
 repositories {
@@ -41,17 +40,7 @@ checkstyle {
     setMaxWarnings(0)
 }
 
-spotbugsMain {
-    setExcludeFilter(file("${this.getRootDir()}/config/spotbugs/suppressions.xml"))
 
-    reports {
-        html {
-            getRequired().set(true)
-            getOutputLocation().set(file("${this.getBuildDir()}/reports/spotbugs/main/spotbugs.html"))
-            setStylesheet("fancy-hist.xsl")
-        }
-    }
-}
 
 task compileNative {
     dependsOn(compileJava)

@@ -1,7 +1,5 @@
 plugins {
     id("java-library")
-    id("checkstyle")
-    id("org.cadixdev.licenser").version("0.6.1")
     id("maven-publish")
 }
 
@@ -22,25 +20,18 @@ java {
     setTargetCompatibility(JavaVersion.VERSION_21)
 }
 
+dependencies {
+    implementation 'be.tarsos.dsp:core:2.5'
+    implementation 'be.tarsos.dsp:jvm:2.5'
+}
+
 repositories {
     mavenCentral()
+    maven {
+        name = "TarsosDSP repository"
+        url = "https://mvn.0110.be/releases"
+    }
 }
-
-license {
-    setHeader(file("HEADER.txt"))
-}
-
-checkstyle {
-    setToolVersion("10.1")
-    setConfigFile(file("${this.getRootDir()}/config/checkstyle/checkstyle.xml"))
-    setConfigProperties("configDirectory": "${this.getRootDir()}/config/checkstyle")
-
-    // The build should immediately fail if we have errors.
-    setMaxErrors(0)
-    setMaxWarnings(0)
-}
-
-
 
 task compileNative {
     dependsOn(compileJava)

@@ -17,6 +17,11 @@
 
 package net.elytrium.rnnoise;
 
+import be.tarsos.dsp.AudioDispatcher;
+import be.tarsos.dsp.io.jvm.AudioDispatcherFactory;
+import be.tarsos.dsp.io.jvm.WaveformWriter;
+import be.tarsos.dsp.resample.RateTransposer;
+
 import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
@@ -26,6 +31,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 
 /**
  * @author HOX4SGH
@@ -35,70 +41,70 @@ import java.io.IOException;
 public class App {
 
     public static void main(String[] args) throws UnsupportedAudioFileException, IOException {
-        String inFile = "/Users/HOX4SGH/Downloads/Resourses_48KHz_rnn_origin.wav";
         String outFile = "output-denoised.wav";
 
+        String inFile = "/Users/HOX4SGH/Downloads/Resourses_48KHz_rnn_origin.wav";
+
+
+        AudioDispatcher dispatcher = AudioDispatcherFactory.fromPipe(
+                inFile,
+                48000,
+                1024,
+                0
+        );
+        dispatcher.addAudioProcessor(new RateTransposer(16000.0 / 48000.0));
+        dispatcher.addAudioProcessor(new WaveformWriter(new AudioFormat(16000, 16, 1, true, false), "temp_16k.wav"));
+        dispatcher.run();
+
+
         // 1. 打开 WAV 文件
-        AudioInputStream ais = AudioSystem.getAudioInputStream(new File(inFile));
+        AudioInputStream ais = AudioSystem.getAudioInputStream(new File("temp_16k.wav"));
         AudioFormat format = ais.getFormat();
 
         System.out.println(format);
 
-
-        AudioFormat targetFormat = new AudioFormat(
-                16000.0f, // sampleRate
-                16,       // sampleSizeInBits
-                1,        // channels
-                true,     // signed
-                false     // little-endian
-        );
-
-        AudioInputStream convertedAis = AudioSystem.getAudioInputStream(targetFormat, ais);
-
-        System.out.println("convertedAis format: " + convertedAis.getFormat());
-        System.out.println("convertedAis available: " + convertedAis.available());
-
         // 检查格式（16kHz 单声道 16bit PCM）
-//        if (format.getSampleRate() != 16000.0f || format.getChannels() != 1 || format.getSampleSizeInBits() != 16) {
-//            throw new IllegalArgumentException("WAV 必须为 16kHz 单声道 16bit PCM");
-//        }
+        if (format.getSampleRate() != 16000.0f || format.getChannels() != 1 || format.getSampleSizeInBits() != 16) {
+            throw new IllegalArgumentException("WAV 必须为 16kHz 单声道 16bit PCM");
+        }
 
         // 2. 预备输出流
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
         DenoiseState state = new DenoiseState();
+        System.out.println("DenoiseState created: frameSize = " + state.getFrameSize());
+
         byte[] frameBytes = new byte[480 * 2];
-        short[] frameShorts = new short[480];
         float[] frameIn = new float[480];
         float[] frameOut = new float[480];
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
         int n;
-        while ((n = convertedAis.read(frameBytes)) > 0) {
+        while ((n = ais.read(frameBytes)) > 0) {
             if (n < frameBytes.length) {
-                for (int i = n; i < frameBytes.length; i++) frameBytes[i] = 0;
+                Arrays.fill(frameBytes, n, frameBytes.length, (byte)0);
             }
-            // byte -> short
+            // byte -> float
             for (int i = 0; i < 480; i++) {
                 int low = frameBytes[i * 2] & 0xff;
                 int high = frameBytes[i * 2 + 1];
-                frameShorts[i] = (short) ((high << 8) | low);
-                frameIn[i] = frameShorts[i] / 32768f;
+                short sample = (short)((high << 8) | low);
+                frameIn[i] = sample / 32768f;
             }
-            // denoise
+            System.out.printf("in: %f %f %f %f %f\n", frameIn[0], frameIn[1], frameIn[2], frameIn[3], frameIn[4]);
+            System.out.printf("out: %f %f %f %f %f\n", frameOut[0], frameOut[1], frameOut[2], frameOut[3], frameOut[4]);
+
             state.processFrame(frameOut, frameIn);
-            // float -> short -> byte
+            // float -> byte
             for (int i = 0; i < 480; i++) {
-                float v = frameOut[i];
-                if (v > 1.0f) v = 1.0f;
-                if (v < -1.0f) v = -1.0f;
-                frameShorts[i] = (short) (v * 32767f);
-                frameBytes[i * 2] = (byte) (frameShorts[i] & 0xff);
-                frameBytes[i * 2 + 1] = (byte) ((frameShorts[i] >> 8) & 0xff);
+                int v = (int)(frameOut[i] * 32767.0);
+                if (v > 32767) v = 32767;
+                if (v < -32768) v = -32768;
+                frameBytes[i * 2] = (byte)(v & 0xff);
+                frameBytes[i * 2 + 1] = (byte)((v >> 8) & 0xff);
             }
-            baos.write(frameBytes, 0, frameBytes.length);
+            baos.write(frameBytes);
         }
         ais.close();
-        convertedAis.close();
 
         // 3. 写回 WAV
         byte[] outBytes = baos.toByteArray();

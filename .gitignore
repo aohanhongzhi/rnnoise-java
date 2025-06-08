@@ -102,3 +102,5 @@ src/**/c/include/jni
 # CLion related stuff
 src/**/c/.idea
 src/**/c/cmake-build-*
+
+*.wav
